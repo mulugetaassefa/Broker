@@ -25,7 +25,10 @@ import {
   Email as EmailIcon,
   Report as ReportIcon,
   ChatBubbleOutline as ChatBubbleOutlineIcon,
-  Person as PersonIcon
+  Person as PersonIcon,
+  HomeWork as HomeWorkIcon,
+  Notifications as NotificationsIcon,
+  Favorite as FavoriteIcon
 } from '@mui/icons-material';
 import api from '../../services/api';
 
@@ -45,47 +48,66 @@ function TabPanel({ children, value, index, ...other }) {
 }
 
 // StatsCard component for displaying statistics
-function StatsCard({ title, value, icon: Icon, change, color = 'primary' }) {
-  return (
-    <Card sx={{ height: '100%' }}>
-      <CardContent>
-        <Box display="flex" justifyContent="space-between" alignItems="center">
-          <Box>
-            <Typography color="textSecondary" gutterBottom variant="body2">
-              {title}
-            </Typography>
-            <Typography variant="h5">{value}</Typography>
-          </Box>
-          <Box
-            sx={{
-              p: 2,
-              borderRadius: '50%',
-              bgcolor: `${color}.light`,
-              color: `${color}.contrastText`,
-            }}
-          >
-            <Icon />
-          </Box>
+function StatsCard({ title, value, icon: Icon, change, color = 'primary', onClick }) {
+  const cardContent = (
+    <CardContent>
+      <Box display="flex" justifyContent="space-between" alignItems="center">
+        <Box>
+          <Typography color="textSecondary" gutterBottom variant="body2">
+            {title}
+          </Typography>
+          <Typography variant="h5">{value}</Typography>
         </Box>
-        {change !== undefined && (
-          <Box display="flex" alignItems="center" mt={1}>
-            {change >= 0 ? (
-              <CheckCircleIcon color="success" fontSize="small" />
-            ) : (
-              <ReportIcon color="error" fontSize="small" />
-            )}
-            <Typography
-              variant="body2"
-              color={change >= 0 ? 'success.main' : 'error.main'}
-              sx={{ ml: 0.5 }}
-            >
-              {Math.abs(change)}% {change >= 0 ? 'increase' : 'decrease'} from last month
-            </Typography>
-          </Box>
-        )}
-      </CardContent>
-    </Card>
+        <Box
+          sx={{
+            p: 2,
+            borderRadius: '50%',
+            bgcolor: `${color}.light`,
+            color: `${color}.contrastText`,
+          }}
+        >
+          <Icon />
+        </Box>
+      </Box>
+      {change !== undefined && (
+        <Box display="flex" alignItems="center" mt={1}>
+          {change >= 0 ? (
+            <CheckCircleIcon color="success" fontSize="small" />
+          ) : (
+            <ReportIcon color="error" fontSize="small" />
+          )}
+          <Typography
+            variant="body2"
+            color={change >= 0 ? 'success.main' : 'error.main'}
+            sx={{ ml: 0.5 }}
+          >
+            {Math.abs(change)}% {change >= 0 ? 'increase' : 'decrease'} from last month
+          </Typography>
+        </Box>
+      )}
+    </CardContent>
   );
+
+  if (onClick) {
+    return (
+      <Card 
+        onClick={onClick}
+        sx={{ 
+          height: '100%',
+          cursor: 'pointer',
+          transition: 'transform 0.2s, box-shadow 0.2s',
+          '&:hover': {
+            transform: 'translateY(-4px)',
+            boxShadow: 8,
+          },
+        }}
+      >
+        {cardContent}
+      </Card>
+    );
+  }
+
+  return <Card sx={{ height: '100%' }}>{cardContent}</Card>;
 }
 
 // QuickActionCard component for quick action buttons
@@ -394,8 +416,21 @@ const AdminDashboard = () => {
   }, []);
 
   // Stats Card Component
-  const StatsCard = ({ title, value, icon: Icon, change, color = 'primary' }) => (
-    <Card sx={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
+  const StatsCard = ({ title, value, icon: Icon, change, color = 'primary', onClick }) => (
+    <Card 
+      onClick={onClick}
+      sx={{ 
+        height: '100%', 
+        display: 'flex', 
+        flexDirection: 'column',
+        cursor: onClick ? 'pointer' : 'default',
+        transition: 'transform 0.2s, box-shadow 0.2s',
+        '&:hover': {
+          transform: onClick ? 'translateY(-4px)' : 'none',
+          boxShadow: onClick ? theme.shadows[8] : 'none',
+        },
+      }}
+    >
       <CardContent>
         <Box display="flex" justifyContent="space-between" alignItems="center" mb={1}>
           <Typography color="textSecondary" variant="subtitle2" gutterBottom>
@@ -510,11 +545,20 @@ const AdminDashboard = () => {
         </Grid>
         <Grid item xs={12} sm={6} md={3}>
           <StatsCard 
-            title="Total Messages" 
-            value={stats.totalMessages} 
+            title="Properties" 
+            value={stats.pendingRequests} 
+            icon={HomeWorkIcon} 
+            color="primary"
+            onClick={() => navigate('/admin/properties')}
+          />
+        </Grid>
+        <Grid item xs={12} sm={6} md={3}>
+          <StatsCard 
+            title="Messages" 
+            value={stats.unreadMessages} 
             icon={MessageIcon} 
-            change={stats.messageChange}
             color="success"
+            onClick={() => navigate('/admin/messages')}
           />
         </Grid>
         <Grid item xs={12} sm={6} md={3}>
@@ -524,15 +568,6 @@ const AdminDashboard = () => {
             icon={PersonIcon} 
             change={stats.activeChange}
             color="warning"
-          />
-        </Grid>
-        <Grid item xs={12} sm={6} md={3}>
-          <StatsCard 
-            title="Pending Requests" 
-            value={stats.pendingRequests} 
-            icon={FavoriteIcon} 
-            change={stats.requestChange}
-            color="error"
           />
         </Grid>
       </Grid>

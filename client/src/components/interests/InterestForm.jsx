@@ -1,7 +1,6 @@
 import React, { useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { toast } from 'react-hot-toast';
-import { FiUpload, FiX } from 'react-icons/fi';
 import api from '../../services/api';
 
 const InterestForm = ({ onSuccess, interest: propInterest }) => {
@@ -20,7 +19,6 @@ const InterestForm = ({ onSuccess, interest: propInterest }) => {
     } : { type: 'house', transactionType: 'buy' }
   });
 
-  const [files, setFiles] = useState(propInterest?.images || []);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const selectedType = watch('type');
   const currentYear = new Date().getFullYear();
@@ -47,20 +45,7 @@ const InterestForm = ({ onSuccess, interest: propInterest }) => {
     ]
   };
 
-  const handleFileChange = (e) => {
-    const newFiles = Array.from(e.target.files);
-    setFiles(prev => [...prev, ...newFiles].slice(0, 5));
-  };
-
-  const removeFile = (index) => {
-    setFiles(prev => prev.filter((_, i) => i !== index));
-  };
-
   const onSubmit = async (data) => {
-    if (files.length === 0 && !propInterest?.images?.length) {
-      toast.error('Please upload at least one image');
-      return;
-    }
 
     setIsSubmitting(true);
     const formData = new FormData();
@@ -70,12 +55,17 @@ const InterestForm = ({ onSuccess, interest: propInterest }) => {
     formData.append('transactionType', data.transactionType);
     formData.append('notes', data.notes || '');
     
-    // Prepare price range
+    // Prepare price range as an object (not stringified)
     const priceRange = {
       min: parseFloat(data.details?.minPrice) || 0,
-      max: parseFloat(data.details?.maxPrice) || 0
+      max: parseFloat(data.details?.maxPrice) || 0,
+      currency: 'USD' // Add default currency
     };
-    formData.append('priceRange', JSON.stringify(priceRange));
+    
+    // Append price range as separate fields
+    formData.append('priceRange[min]', priceRange.min);
+    formData.append('priceRange[max]', priceRange.max);
+    formData.append('priceRange[currency]', priceRange.currency);
     
     // Add type-specific fields
     if (data.type === 'house') {
@@ -95,12 +85,7 @@ const InterestForm = ({ onSuccess, interest: propInterest }) => {
       formData.append('description', data.details?.description || '');
     }
     
-    // Add new files only (existing files are already on the server)
-    files.forEach(file => {
-      if (file instanceof File) {
-        formData.append('images', file);
-      }
-    });
+    // No image handling needed
 
     try {
       if (propInterest?._id) {
@@ -114,7 +99,6 @@ const InterestForm = ({ onSuccess, interest: propInterest }) => {
       }
       
       reset();
-      setFiles([]);
       onSuccess?.();
     } catch (error) {
       console.error('Submission error:', error);
@@ -155,8 +139,8 @@ const InterestForm = ({ onSuccess, interest: propInterest }) => {
             >
               <option value="buy">Buy</option>
               <option value="sell">Sell</option>
-              <option value="lessor">Lessor</option>
-              <option value="lessee">Lessee</option>
+              <option value="rent">Rent</option>
+              <option value="lease">Lease</option>
             </select>
           </div>
         </div>
@@ -238,53 +222,6 @@ const InterestForm = ({ onSuccess, interest: propInterest }) => {
               )}
             </div>
           ))}
-        </div>
-
-        <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1">
-            Images <span className="text-red-500">*</span>
-          </label>
-          <div className="mt-1 flex justify-center px-6 pt-5 pb-6 border-2 border-gray-300 border-dashed rounded-md">
-            <div className="space-y-1 text-center">
-              <FiUpload className="mx-auto h-12 w-12 text-gray-400" />
-              <div className="flex text-sm text-gray-600">
-                <label className="relative cursor-pointer bg-white rounded-md font-medium text-blue-600 hover:text-blue-500">
-                  <span>Upload files</span>
-                  <input
-                    type="file"
-                    className="sr-only"
-                    multiple
-                    accept="image/*"
-                    onChange={handleFileChange}
-                    disabled={isSubmitting}
-                  />
-                </label>
-                <p className="pl-1">or drag and drop</p>
-              </div>
-              <p className="text-xs text-gray-500">PNG, JPG, WEBP up to 5MB</p>
-            </div>
-          </div>
-          
-          {files.length > 0 && (
-            <div className="mt-4 grid grid-cols-2 gap-2">
-              {files.map((file, index) => (
-                <div key={index} className="relative group">
-                  <img
-                    src={file instanceof File ? URL.createObjectURL(file) : file}
-                    alt={`Preview ${index + 1}`}
-                    className="h-24 w-full object-cover rounded border"
-                  />
-                  <button
-                    type="button"
-                    onClick={() => removeFile(index)}
-                    className="absolute -top-2 -right-2 bg-red-500 text-white rounded-full p-1 opacity-0 group-hover:opacity-100"
-                  >
-                    <FiX className="h-4 w-4" />
-                  </button>
-                </div>
-              ))}
-            </div>
-          )}
         </div>
 
         <div>

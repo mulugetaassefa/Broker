@@ -12,9 +12,57 @@ import {
   FiSearch,
   FiCheck,
   FiX,
-  FiAlertCircle
+  FiAlertCircle,
+  FiImage
 } from 'react-icons/fi';
 import api from '../../services/api';
+
+// Helper function to get the correct image URL
+const getImageUrl = (image) => {
+  if (!image) {
+    console.warn('No image provided to getImageUrl');
+    return '';
+  }
+
+  // If it's already a full URL or data URL, return as is
+  if (typeof image === 'string' && (image.startsWith('http') || image.startsWith('blob:') || image.startsWith('data:'))) {
+    return image;
+  }
+
+  // Handle direct URL objects
+  if (image?.url) {
+    return image.url;
+  }
+
+  // Extract filename from different possible locations
+  let filename = '';
+  
+  if (typeof image === 'string') {
+    // If it's a full path, extract just the filename
+    filename = image.split('/').pop() || image;
+  } else if (image?.path) {
+    // Handle image objects with path
+    filename = image.path.split('/').pop() || image.path.split('\\\\').pop() || '';
+  } else if (image?.filename) {
+    // Handle image objects with filename
+    filename = image.filename;
+  } else if (image?.originalname) {
+    // For file objects
+    return URL.createObjectURL(image);
+  }
+
+  // If we have a filename, construct the full URL
+  if (filename) {
+    const baseUrl = process.env.REACT_APP_API_URL || 'http://localhost:5000';
+    // Remove any leading slashes from the filename
+    const cleanFilename = filename.replace(/^[\\/]+/, '');
+    // Construct the URL without /api prefix
+    return `${baseUrl}/uploads/interests/${cleanFilename}`;
+  }
+
+  console.warn('Could not determine image URL for:', image);
+  return '';
+};
 
 const AdminInterests = () => {
   const [interests, setInterests] = useState([]);
@@ -275,7 +323,9 @@ const AdminInterests = () => {
                 </tr>
               </thead>
               <tbody className="bg-white divide-y divide-gray-200">
-                {interests.map((interest) => (
+                {interests && interests.length > 0 ? (
+                  interests.map((interest) => (
+                    <tr key={interest._id} className="hover:bg-gray-50">
                   <tr key={interest._id} className="hover:bg-gray-50">
                     <td className="px-6 py-4 whitespace-nowrap">
                       <div className="flex items-center">
@@ -298,27 +348,54 @@ const AdminInterests = () => {
                       </div>
                     </td>
                     <td className="px-6 py-4">
-                      <div className="flex items-center text-sm text-gray-900">
-                        {typeIcons[interest.type]?.icon}
-                        <span className="font-medium">{typeIcons[interest.type]?.label || 'Other'}</span>
-                        <span className="mx-2 text-gray-300">•</span>
-                        <span className="capitalize">{interest.transactionType || 'N/A'}</span>
-                      </div>
-                      <div className="mt-1 text-sm text-gray-500">
-                        {interest.type === 'house' && (
-                          <span>{interest.numRooms ? `${interest.numRooms} rooms` : ''}</span>
-                        )}
-                        {interest.type === 'car' && interest.carModel && (
-                          <span>{interest.carModel} {interest.carYear ? `(${interest.carYear})` : ''}</span>
-                        )}
-                        {interest.type === 'other' && interest.itemType && (
-                          <span>{interest.itemType}</span>
-                        )}
-                        {interest.priceRange && (
-                          <div className="mt-1">
-                            {interest.priceRange.currency || 'ETB'} {interest.priceRange.min || '0'} - {interest.priceRange.max || 'Any'}
+                      <div className="flex items-center space-x-4">
+                        {interest.images?.[0] ? (
+                          <div className="relative h-16 w-16 flex-shrink-0">
+                            <img 
+                              src={getImageUrl(interest.images[0])}
+                              alt={interest.type || 'Interest'}
+                              className="h-full w-full object-cover rounded"
+                              onError={(e) => {
+                                console.error('Failed to load image:', e.target.src);
+                                e.target.onerror = null;
+                                e.target.src = 'data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIyMDAiIGhlaWdodD0iMjAwIiB2aWV3Qm94PSIwIDAgMjQgMjQiIGZpbGw9Im5vbmUiIHN0cm9rZT0iI2QxZDVkYiIgc3Ryb2tlLXdpZHRoPSIyIiBzdHJva2UtbGluZWNhcD0icm91bmQiIHN0cm9rZS1saW5lam9pbj0icm91bmQiPjxwYXRoIGQ9Ik0xOC44NSA5LjQyTDEyIDIuMTJMNS4xNSA5LjQyQzQuMzYgMTAuMTkgNC4zNiAxMS40OSA1LjE1IDEyLjI4TDExLjIyIDE4LjM1QzExLjYyIDE4Ljc1IDEyLjI1IDE4Ljc1IDEyLjY1IDE4LjM1TDE4Ljg1IDEyLjI4QzE5LjY0IDExLjQ5IDE5LjY0IDEwLjE5IDE4Ljg1IDkuNDJaIj48L3BhdGg+PHBhdGggZD0iTTkgMTJIMTUiPjwvcGF0aD48L3N2Zz4=';
+                              }}
+                            />
+                            {interest.images.length > 1 && (
+                              <div className="absolute -bottom-1 -right-1 bg-black bg-opacity-50 text-white text-xs px-1 rounded">
+                                +{interest.images.length - 1}
+                              </div>
+                            )}
+                          </div>
+                        ) : (
+                          <div className="h-16 w-16 bg-gray-100 rounded flex items-center justify-center text-gray-400">
+                            <FiImage className="w-6 h-6" />
                           </div>
                         )}
+                        <div className="flex-1">
+                          <div className="flex items-center text-sm text-gray-900">
+                            {typeIcons[interest.type]?.icon}
+                            <span className="font-medium">{typeIcons[interest.type]?.label || 'Other'}</span>
+                            <span className="mx-2 text-gray-300">•</span>
+                            <span className="capitalize">{interest.transactionType || 'N/A'}</span>
+                          </div>
+                          <div className="mt-1 text-sm text-gray-500">
+                            {interest.type === 'house' && interest.houseDetails?.numRooms && (
+                              <span>{interest.houseDetails.numRooms} rooms</span>
+                            )}
+                            {interest.type === 'car' && interest.carDetails?.model && (
+                              <span>{interest.carDetails.model} {interest.carDetails.year ? `(${interest.carDetails.year})` : ''}</span>
+                            )}
+                            {interest.type === 'other' && interest.otherDetails?.itemType && (
+                              <span>{interest.otherDetails.itemType}</span>
+                            )}
+                            {interest.priceRange && (
+                              <div className="mt-1">
+                                {interest.priceRange.currency || 'ETB'} {interest.priceRange.min || '0'} - {interest.priceRange.max || 'Any'}
+                              </div>
+                            )}
+                          </div>
+                        </div>
                       </div>
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">
@@ -359,13 +436,16 @@ const AdminInterests = () => {
                       </button>
                     </td>
                   </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        )}
-      </div>
-
+                ))
+              ) : (
+                <tr>
+                  <td colSpan="5" className="px-6 py-4 text-center text-gray-500">
+                    No interests found
+                  </td>
+                </tr>
+              )}
+            </tbody>
+          </table>
       {/* Pagination */}
       {pagination.totalPages > 1 && (
         <div className="mt-6 flex items-center justify-between">

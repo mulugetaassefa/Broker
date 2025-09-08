@@ -406,48 +406,54 @@ const AdminMessages = () => {
                 <p>No messages in this conversation yet.</p>
               </div>
             ) : (
-              messages.map((message) => (
-                <div 
-                  key={message._id} 
-                  className={`flex ${message.sender._id === user.id ? 'justify-end' : 'justify-start'}`}
-                >
+              messages.map((message) => {
+                if (!message || !message.sender) return null;
+                
+                const isCurrentUser = message.sender._id === user?.id;
+                
+                return (
                   <div 
-                    className={`max-w-xs md:max-w-md lg:max-w-lg xl:max-w-xl rounded-lg px-4 py-2 ${
-                      message.sender._id === user.id 
-                        ? 'bg-blue-500 text-white rounded-br-none' 
-                        : 'bg-white border border-gray-200 rounded-bl-none'
-                    }`}
+                    key={message._id || `msg-${Math.random().toString(36).substr(2, 9)}`} 
+                    className={`flex ${isCurrentUser ? 'justify-end' : 'justify-start'}`}
                   >
-                    <div className="text-sm">{message.content}</div>
-                    
-                    {message.attachments && message.attachments.length > 0 && (
-                      <div className="mt-2 space-y-2">
-                        {message.attachments.map((file, idx) => (
-                          <div key={idx} className="bg-black bg-opacity-10 p-2 rounded">
-                            <a 
-                              href={file.url} 
-                              target="_blank" 
-                              rel="noopener noreferrer"
-                              className="text-sm text-blue-600 hover:underline break-all"
-                            >
-                              {file.fileName || `Attachment ${idx + 1}`}
-                            </a>
-                          </div>
-                        ))}
+                    <div 
+                      className={`max-w-xs md:max-w-md lg:max-w-lg xl:max-w-xl rounded-lg px-4 py-2 ${
+                        isCurrentUser
+                          ? 'bg-blue-500 text-white rounded-br-none' 
+                          : 'bg-white border border-gray-200 rounded-bl-none'
+                      }`}
+                    >
+                      <div className="text-sm">{message.content}</div>
+                      
+                      {message.attachments && message.attachments.length > 0 && (
+                        <div className="mt-2 space-y-2">
+                          {message.attachments.map((file, idx) => (
+                            <div key={idx} className="bg-black bg-opacity-10 p-2 rounded">
+                              <a 
+                                href={file.url} 
+                                target="_blank" 
+                                rel="noopener noreferrer"
+                                className="text-sm text-blue-600 hover:underline break-all"
+                              >
+                                {file.fileName || `Attachment ${idx + 1}`}
+                              </a>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                      
+                      <div className={`text-xs mt-1 text-right ${
+                        isCurrentUser ? 'text-blue-100' : 'text-gray-500'
+                      }`}>
+                        {new Date(message.createdAt).toLocaleTimeString([], { 
+                          hour: '2-digit', 
+                          minute: '2-digit'
+                        })}
                       </div>
-                    )}
-                    
-                    <div className={`text-xs mt-1 text-right ${
-                      message.sender._id === user.id ? 'text-blue-100' : 'text-gray-500'
-                    }`}>
-                      {new Date(message.createdAt).toLocaleTimeString([], { 
-                        hour: '2-digit', 
-                        minute: '2-digit'
-                      })}
                     </div>
                   </div>
-                </div>
-              ))
+                );
+              })
             )}
             <div ref={messagesEndRef} />
           </div>

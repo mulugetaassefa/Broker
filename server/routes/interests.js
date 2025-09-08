@@ -416,17 +416,107 @@ router.patch('/:id/status', auth, async (req, res) => {
   }
 });
 
-// Delete interest (admin only)
-router.delete('/:id', auth, async (req, res) => {
+// Update interest
+router.put('/:id', auth, upload.array('images', 5), async (req, res) => {
   try {
-    if (req.user.role !== 'admin') {
-      return res.status(403).json({
+    // Find the existing interest first
+    const interest = await Interest.findById(req.params.id);
+    
+    if (!interest) {
+      return res.status(404).json({
         success: false,
-        message: 'Not authorized to delete interests'
+        message: 'Interest not found'
       });
     }
 
-    const interest = await Interest.findByIdAndDelete(req.params.id);
+    // Check if user is the owner or an admin
+    if (interest.user.toString() !== req.user.id && req.user.role !== 'admin') {
+      return res.status(403).json({
+        success: false,
+        message: 'Not authorized to update this interest'
+      });
+    }
+
+    // Parse request data
+    let updateData = {};
+    
+    if (req.body.data) {
+      try {
+        updateData = typeof req.body.data === 'string' 
+          ? JSON.parse(req.body.data) 
+          : req.body.data;
+      } catch (error) {
+        console.error('Error parsing update data:', error);
+        return res.status(400).json({
+          success: false,
+          message: 'Invalid update data format'
+        });
+      }
+    } else {
+      updateData = req.body;
+    }
+
+    // Handle existing images from the form data
+    const existingImages = [];
+    if (req.body.existingImages) {
+      // Handle both array and object formats
+      const existingImagesData = Array.isArray(req.body.existingImages) 
+        ? req.body.existingImages 
+        : Object.values(req.body.existingImages);
+      
+      // Keep only the existing images that are in the submitted list
+      existingImages.push(...(interest.images || []).filter(img => 
+        img && img.filename && existingImagesData.includes(img.filename)
+      ));
+    } else if (interest.images?.length) {
+      // If no existing images were submitted but there were some before, keep them
+      existingImages.push(...interest.images);
+    }
+
+    // Handle new file uploads if any
+    if (req.files && req.files.length > 0) {
+      const newImages = req.files.map(file => ({
+        path: file.path.replace(/\\/g, '/'),
+        filename: file.filename,
+        originalname: file.originalname,
+        mimetype: file.mimetype,
+        size: file.size,
+        createdAt: new Date()
+      }));
+      
+      // Combine existing and new images
+      updateData.images = [...existingImages, ...newImages];
+    } else {
+      // If no new files, just use the existing images
+      updateData.images = existingImages;
+    }
+
+    // Update the interest
+    const updatedInterest = await Interest.findByIdAndUpdate(
+      req.params.id,
+      updateData,
+      { new: true, runValidators: true }
+    ).populate('user', 'firstName lastName email phone');
+
+    res.json({
+      success: true,
+      message: 'Interest updated successfully',
+      data: updatedInterest
+    });
+  } catch (error) {
+    console.error('Error updating interest:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to update interest',
+      error: process.env.NODE_ENV === 'development' ? error.message : undefined
+    });
+  }
+});
+
+// Delete interest (user can delete their own, admin can delete any)
+router.delete('/:id', auth, async (req, res) => {
+  try {
+    const interest = await Interest.findById(req.params.id);
 
     if (!interest) {
       return res.status(404).json({
@@ -435,18 +525,30 @@ router.delete('/:id', auth, async (req, res) => {
       });
     }
 
+    // Check if user is the owner or an admin
+    if (interest.user.toString() !== req.user.id && req.user.role !== 'admin') {
+      return res.status(403).json({
+        success: false,
+        message: 'Not authorized to delete this interest'
+      });
+    }
+
     // Delete associated images
     if (interest.images && interest.images.length > 0) {
       interest.images.forEach(image => {
         try {
-          if (fs.existsSync(image.path)) {
-            fs.unlinkSync(image.path);
+          const filePath = path.join(__dirname, '..', image.path);
+          if (fs.existsSync(filePath)) {
+            fs.unlinkSync(filePath);
           }
         } catch (err) {
           console.error('Error deleting image:', err);
         }
       });
     }
+
+    // Delete the interest
+    await Interest.findByIdAndDelete(req.params.id);
 
     res.json({
       success: true,

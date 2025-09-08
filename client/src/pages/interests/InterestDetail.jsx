@@ -47,16 +47,49 @@ const InterestDetail = () => {
 
   // Get full image URL
   const getImageUrl = (image) => {
-    if (!image) return '';
-    let url = image.path || image;
-    if (typeof url === 'string' && !url.startsWith('http') && !url.startsWith('blob:')) {
-      // Remove any leading slashes to prevent double slashes
-      url = url.replace(/^\/+/, '');
-      // Prepend base URL if it's a relative path
-      const baseUrl = process.env.REACT_APP_API_URL || 'http://localhost:5000';
-      return `${baseUrl}/${url}`;
+    if (!image) {
+      console.warn('No image provided to getImageUrl');
+      return '';
     }
-    return url;
+
+    // If it's already a full URL or data URL, return as is
+    if (typeof image === 'string' && (image.startsWith('http') || image.startsWith('blob:') || image.startsWith('data:'))) {
+      return image;
+    }
+
+    // Handle direct URL objects
+    if (image?.url) {
+      return image.url;
+    }
+
+    // Extract filename from different possible locations
+    let filename = '';
+    
+    if (typeof image === 'string') {
+      // If it's a full path, extract just the filename
+      filename = image.split('/').pop() || image;
+    } else if (image?.path) {
+      // Handle image objects with path
+      filename = image.path.split('/').pop() || image.path.split('\\\\').pop() || '';
+    } else if (image?.filename) {
+      // Handle image objects with filename
+      filename = image.filename;
+    } else if (image?.originalname) {
+      // For file objects
+      return URL.createObjectURL(image);
+    }
+
+    // If we have a filename, construct the full URL
+    if (filename) {
+      const baseUrl = process.env.REACT_APP_API_URL || 'http://localhost:5000';
+      // Remove any leading slashes from the filename
+      const cleanFilename = filename.replace(/^[\\/]+/, '');
+      // Construct the URL without /api prefix
+      return `${baseUrl}/uploads/interests/${cleanFilename}`;
+    }
+
+    console.warn('Could not determine image URL for:', image);
+    return '';
   };
 
   // Handle image load error

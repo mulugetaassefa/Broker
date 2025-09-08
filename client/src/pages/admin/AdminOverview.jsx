@@ -68,10 +68,10 @@ const StatCard = ({ title, value, icon: Icon, color, trend, trendText }) => (
 const AdminOverview = () => {
   const [stats, setStats] = useState({
     totalUsers: 0,
-    totalProperties: 0,
+    totalInterests: 0,
     totalMessages: 0,
     userGrowth: 0,
-    propertyGrowth: 0,
+    interestGrowth: 0,
     loading: true
   });
   
@@ -100,9 +100,10 @@ const AdminOverview = () => {
       // Extract the total count from the response
       const totalUsers = usersResponse.totalUsers || 0;
 
-      // Fetch properties total (omit status for admin to count all)
-      const propertiesResponse = await api.properties.getAll({ page: 1, limit: 1 });
-      const totalProperties = propertiesResponse?.data?.total || 0;
+      // Fetch total interests count
+      const interestsResponse = await api.interests.getAll({ page: 1, limit: 1 });
+      console.log('Interests API response:', interestsResponse); // Debug log
+      const totalInterests = interestsResponse?.count || interestsResponse?.data?.count || 0;
 
       // Fetch conversations (use count as total messages indicator)
       const conversationsResponse = await api.messages.getConversations();
@@ -114,7 +115,7 @@ const AdminOverview = () => {
       setStats(prev => ({
         ...prev,
         totalUsers,
-        totalProperties,
+        totalInterests,
         totalMessages,
         loading: false
       }));
@@ -212,11 +213,11 @@ const AdminOverview = () => {
         
         <Grid item xs={12} sm={6} md={3}>
           <StatCard
-            title="Total Properties"
-            value={stats.totalProperties.toLocaleString()}
+            title="Total Interests"
+            value={stats.totalInterests.toLocaleString()}
             icon={HomeIcon}
             color="secondary"
-            trend={stats.propertyGrowth}
+            trend={stats.interestGrowth}
             trendText="from last month"
           />
         </Grid>

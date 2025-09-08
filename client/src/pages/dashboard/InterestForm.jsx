@@ -109,36 +109,56 @@ const InterestForm = () => {
     setUploading(true);
     
     try {
-      const formDataToSend = new FormData();
-      
-      // Add basic fields
-      formDataToSend.append('type', formData.type);
-      formDataToSend.append('transactionType', formData.transactionType);
-      if (formData.notes) formDataToSend.append('notes', formData.notes);
-      
-      // Add price range
-      formDataToSend.append('priceRange', JSON.stringify({
-        min: formData.priceRange?.min ? parseFloat(formData.priceRange.min) : 0,
-        max: formData.priceRange?.max ? parseFloat(formData.priceRange.max) : 0
-      }));
-      
+      // Create a plain object for the request
+      const requestData = {
+        type: formData.type,
+        transactionType: formData.transactionType,
+        notes: formData.notes || '',
+        priceRange: {
+          min: formData.priceRange?.min ? parseFloat(formData.priceRange.min) : 0,
+          max: formData.priceRange?.max ? parseFloat(formData.priceRange.max) : 0,
+          currency: 'ETB'
+        }
+      };
+
       // Add type-specific fields
       if (formData.type === 'house') {
-        formDataToSend.append('numRooms', formData.numRooms || 0);
-        formDataToSend.append('numBathrooms', 1); // Default value
-        formDataToSend.append('hasParking', false); // Default value
-        formDataToSend.append('hasGarden', false); // Default value
+        requestData.houseDetails = {
+          numRooms: formData.numRooms ? parseInt(formData.numRooms) : 0,
+          numBathrooms: formData.numBathrooms ? parseInt(formData.numBathrooms) : 1,
+          hasParking: formData.hasParking === true || formData.hasParking === 'true',
+          hasGarden: formData.hasGarden === true || formData.hasGarden === 'true'
+        };
       } else if (formData.type === 'car') {
-        formDataToSend.append('carModel', formData.carModel || '');
-        formDataToSend.append('carYear', formData.carYear || new Date().getFullYear());
-        formDataToSend.append('mileage', 0); // Default value
-        formDataToSend.append('transmission', 'automatic'); // Default value
-        formDataToSend.append('fuelType', 'petrol'); // Default value
+        requestData.carDetails = {
+          model: formData.carModel || 'Unknown',
+          year: formData.carYear ? parseInt(formData.carYear) : new Date().getFullYear(),
+          mileage: formData.mileage ? parseInt(formData.mileage) : 0,
+          transmission: formData.transmission || 'automatic',
+          fuelType: formData.fuelType || 'petrol'
+        };
       } else if (formData.type === 'other') {
-        formDataToSend.append('itemType', formData.itemType || 'Other');
-        formDataToSend.append('condition', 'new'); // Default value
-        formDataToSend.append('description', ''); // Default value
+        requestData.otherDetails = {
+          itemType: formData.itemType || 'Other',
+          condition: formData.condition || 'new',
+          description: formData.description || ''
+        };
       }
+
+      // Create FormData for file uploads
+      const formDataToSend = new FormData();
+      
+      // Append all data as JSON
+      formDataToSend.append('data', JSON.stringify(requestData));
+      
+      // Append files
+      formData.images?.forEach((image) => {
+        if (image.file) {
+          formDataToSend.append('images', image.file);
+        }
+      });
+
+      console.log('Submitting form data:', JSON.stringify(requestData, null, 2));
       
       // Add images
       formData.images?.forEach((image) => {
@@ -165,24 +185,36 @@ const InterestForm = () => {
       }
       
     } catch (error) {
-      console.error('Error submitting interest:', {
-        error: error.message,
+      console.error('Detailed error:', {
+        message: error.message,
         response: error.response?.data,
-        status: error.response?.status
+        status: error.response?.status,
+        request: {
+          url: error.config?.url,
+          method: error.config?.method,
+          data: error.config?.data,
+          headers: error.config?.headers
+        }
       });
       
       // Handle specific error cases
       if (error.response?.status === 400) {
+        // Log the complete error details
+        console.error('Validation errors:', error.response.data);
+        
         // Handle validation errors
         if (error.response.data?.errors) {
           const validationErrors = {};
           error.response.data.errors.forEach(err => {
-            validationErrors[err.field] = err.message;
+            console.error(`Field: ${err.path}, Error: ${err.message}`);
+            validationErrors[err.path] = err.message;
           });
           setErrors(validationErrors);
           toast.error('Please fix the form errors');
+        } else if (error.response.data?.message) {
+          toast.error(error.response.data.message);
         } else {
-          toast.error(error.response.data?.message || 'Invalid form data');
+          toast.error('Invalid form data. Please check all fields.');
         }
       } else if (error.response?.status === 401) {
         toast.error('Please log in to submit an interest');

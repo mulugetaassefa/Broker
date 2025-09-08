@@ -15,6 +15,14 @@ const priceRangeSchema = new mongoose.Schema({
   currency: { type: String, default: 'ETB' }
 });
 
+const getBaseUrl = () => {
+  if (process.env.NODE_ENV === 'production') {
+    return process.env.API_BASE_URL || 'http://your-production-domain.com';
+  } else {
+    return process.env.API_BASE_URL || 'http://localhost:5000';
+  }
+};
+
 const interestSchema = new mongoose.Schema(
   {
     user: {
@@ -88,10 +96,41 @@ const interestSchema = new mongoose.Schema(
   },
   {
     timestamps: true,
-    toJSON: { virtuals: true },
-    toObject: { virtuals: true }
+    toJSON: { 
+      virtuals: true,
+      transform: function(doc, ret) {
+        // Remove sensitive data
+        delete ret.__v;
+        return ret;
+      }
+    },
+    toObject: { 
+      virtuals: true,
+      transform: function(doc, ret) {
+        delete ret.__v;
+        return ret;
+      }
+    }
   }
 );
+
+// Virtual for image URLs
+interestSchema.virtual('imageUrls').get(function() {
+  if (!this.images || this.images.length === 0) return [];
+  return this.images.map(image => ({
+    ...image.toObject(),
+    url: `${getBaseUrl()}/${image.path.replace(/\\/g, '/')}`
+  }));
+});
+
+// Virtual for thumbnail URLs (if needed in the future)
+interestSchema.virtual('thumbnailUrls').get(function() {
+  if (!this.images || this.images.length === 0) return [];
+  return this.images.map(image => ({
+    ...image.toObject(),
+    url: `${getBaseUrl()}/thumbnails/${image.filename}`
+  }));
+});
 
 // Indexes for faster querying
 interestSchema.index({ user: 1, status: 1 });
