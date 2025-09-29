@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
-import { FiEye, FiCheck, FiX, FiFilter, FiSearch, FiExternalLink } from 'react-icons/fi';
+import { FiEye, FiCheck, FiX, FiFilter, FiSearch, FiExternalLink, FiImage, FiXCircle } from 'react-icons/fi';
 import { toast } from 'react-toastify';
 import api from '../../services/api';
 
@@ -20,6 +20,11 @@ const AdminProperties = () => {
   const [showFilters, setShowFilters] = useState(false);
   const [selectedProperties, setSelectedProperties] = useState([]);
   const [bulkAction, setBulkAction] = useState('');
+  const [selectedProperty, setSelectedProperty] = useState(null);
+  const [showImageModal, setShowImageModal] = useState(false);
+  const [currentImageIndex, setCurrentImageIndex] = useState(0);
+  const [showUserInfo, setShowUserInfo] = useState(false);
+  const [selectedUser, setSelectedUser] = useState(null);
 
   useEffect(() => {
     if (activeTab === 'properties') {
@@ -53,14 +58,68 @@ const AdminProperties = () => {
     }
   };
 
+  const getImageUrl = (image) => {
+    if (!image) return '';
+    
+    // If it's already a full URL
+    if (typeof image === 'string' && (image.startsWith('http') || image.startsWith('/'))) {
+      return image;
+    }
+    
+    // If it's an object with url or path
+    if (typeof image === 'object' && image !== null) {
+      if (image.url) return image.url;
+      if (image.path) {
+        const filename = image.path.split('/').pop() || image.path.split('\\').pop();
+        return `${process.env.REACT_APP_API_URL || 'http://localhost:5000'}/uploads/${filename}`;
+      }
+    }
+    
+    // If it's a string that's not a full URL (like a filename)
+    if (typeof image === 'string') {
+      return `${process.env.REACT_APP_API_URL || 'http://localhost:5000'}/uploads/${image}`;
+    }
+    
+    return '';
+  };
+
   const fetchInterests = async () => {
     try {
       setInterestsLoading(true);
+      console.log('Fetching interests...');
+      
       // Use API service to get all interests (admin)
       const res = await api.interests.getAll({});
-      // Some APIs wrap payloads; handle both {data: [...]} and direct arrays
-      const list = Array.isArray(res?.data) ? res.data : (Array.isArray(res) ? res : res?.data?.data || []);
-      setInterests(list);
+      console.log('Raw API response:', res);
+      
+      // The response should be { success, data, count, totalPages, currentPage }
+      let list = [];
+      
+      if (res && res.success) {
+        // Handle both direct data array and paginated response
+        list = Array.isArray(res) ? res : (res.data || []);
+        
+        console.log('Processed interests list:', list.map((i, index) => ({
+          index,
+          _id: i._id,
+          type: i.type,
+          user: i.user ? {
+            exists: true,
+            id: i.user._id,
+            name: `${i.user.firstName || ''} ${i.user.lastName || ''}`.trim() || 'No name',
+            email: i.user.email || 'No email',
+            phone: i.user.phone || 'No phone'
+          } : { exists: false },
+          imagesCount: i.images?.length || 0,
+          status: i.status || 'unknown',
+          priceRange: i.priceRange
+        })));
+      } else {
+        console.error('Unexpected API response format:', res);
+        toast.error('Failed to load interests: Invalid response format');
+      }
+      
+      setInterests(Array.isArray(list) ? list : []);
     } catch (err) {
       console.error('Error fetching interests:', err);
       toast.error(err.response?.data?.message || 'Failed to fetch interests');
@@ -151,6 +210,53 @@ const AdminProperties = () => {
       minimumFractionDigits: 0,
       maximumFractionDigits: 0
     }).format(property.price?.amount || 0);
+  };
+
+  const openImageModal = (property, index = 0) => {
+    setSelectedProperty(property);
+    setCurrentImageIndex(index);
+    setShowImageModal(true);
+  };
+
+  const openUserInfo = (user) => {
+    if (!user) {
+      console.error('No user data provided');
+      toast.error('No user information available');
+      return;
+    }
+    
+    // Log the user object for debugging
+    console.log('User info:', user);
+    
+    // Ensure we have the required fields
+    const userData = {
+      _id: user._id,
+      firstName: user.firstName || user.first_name || 'N/A',  // Handle different naming conventions
+      lastName: user.lastName || user.last_name || '',
+      email: user.email || 'No email',
+      phone: user.phone || user.phoneNumber || 'No phone',
+      role: user.role || 'user',
+      ...user  // Spread any additional user properties
+    };
+    
+    setSelectedUser(userData);
+    setShowUserInfo(true);
+  };
+
+  const nextImage = () => {
+    if (selectedProperty && selectedProperty.images) {
+      setCurrentImageIndex((prevIndex) => 
+        prevIndex === selectedProperty.images.length - 1 ? 0 : prevIndex + 1
+      );
+    }
+  };
+
+  const prevImage = () => {
+    if (selectedProperty && selectedProperty.images) {
+      setCurrentImageIndex((prevIndex) =>
+        prevIndex === 0 ? selectedProperty.images.length - 1 : prevIndex - 1
+      );
+    }
   };
 
   if (activeTab === 'properties' && loading) {
@@ -345,10 +451,28 @@ const AdminProperties = () => {
                     <div className="flex items-center">
                       <div className="flex-shrink-0 h-10 w-10">
                         {property.images && property.images.length > 0 ? (
-                          <img className="h-10 w-10 rounded-md object-cover" src={property.images[0].url} alt="" />
+                          <div 
+                            className="h-10 w-10 rounded-md overflow-hidden cursor-pointer hover:opacity-80 transition-opacity relative"
+                            onClick={() => openImageModal(property, 0)}
+                          >
+                            <img 
+                              className="h-full w-full object-cover" 
+                              src={getImageUrl(property.images[0])}
+                              alt={`${property.title} - Image 1`}
+                              onError={(e) => {
+                                e.target.onerror = null;
+                                e.target.src = 'data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIyMDAiIGhlaWdodD0iMjAwIiB2aWV3Qm94PSIwIDAgMjQgMjQiIGZpbGw9Im5vbmUiIHN0cm9rZT0iI2QxZDVkYiIgc3Ryb2tlLXdpZHRoPSIyIiBzdHJva2UtbGluZWNhcD0icm91bmQiIHN0cm9rZS1saW5lam9pbj0icm91bmQiPjxwYXRoIGQ9Ik0xOC44NSA5LjQyTDEyIDIuMTJMNS4xNSA5LjQyQzQuMzYgMTAuMTkgNC4zNiAxMS40OSA1LjE1IDEyLjI4TDExLjIyIDE4LjM1QzExLjYyIDE4Ljc1IDEyLjI1IDE4Ljc1IDEyLjY1IDE4LjM1TDE4Ljg1IDEyLjI4QzE5LjY0IDExLjQ5IDE5LjY0IDEwLjE5IDE4Ljg1IDkuNDZaIi8+PC9zdmc+';
+                              }}
+                            />
+                            {property.images.length > 1 && (
+                              <div className="absolute -bottom-1 -right-1 bg-black bg-opacity-60 text-white text-xs rounded-full w-5 h-5 flex items-center justify-center">
+                                +{property.images.length - 1}
+                              </div>
+                            )}
+                          </div>
                         ) : (
                           <div className="h-10 w-10 rounded-md bg-gray-200 flex items-center justify-center">
-                            <span className="text-gray-500 text-xs">No Image</span>
+                            <FiImage className="text-gray-400" />
                           </div>
                         )}
                       </div>
@@ -362,11 +486,32 @@ const AdminProperties = () => {
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap">
                     <div className="text-sm text-gray-900">
-                      {(property.userInfo?.firstName || property.user?.firstName) || ''} {(property.userInfo?.lastName || property.user?.lastName) || ''}
+                      {property.userInfo?.firstName || 'N/A'} {property.userInfo?.lastName || ''}
                     </div>
-                    <div className="text-sm text-gray-500">{property.userInfo?.email || property.user?.email}</div>
-                    {(property.userInfo?.phone || property.user?.phone) && (
-                      <div className="text-sm text-gray-500">{property.userInfo?.phone || property.user?.phone}</div>
+                    {property.userInfo?.email && (
+                      <div className="text-sm text-gray-500">
+                        <button 
+                          onClick={() => openUserInfo(property.userInfo)}
+                          className="text-blue-600 hover:text-blue-800 hover:underline"
+                        >
+                          {property.userInfo.email}
+                        </button>
+                      </div>
+                    )}
+                    {property.userInfo?.phone && (
+                      <div className="text-sm text-gray-500">
+                        <a 
+                          href={`tel:${property.userInfo.phone}`} 
+                          className="hover:underline"
+                        >
+                          {property.userInfo.phone}
+                        </a>
+                      </div>
+                    )}
+                    {!property.userInfo && (
+                      <div className="text-sm text-gray-500">
+                        No user information
+                      </div>
                     )}
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap">
@@ -457,17 +602,27 @@ const AdminProperties = () => {
                     <tr key={it._id} className="hover:bg-gray-50">
                       <td className="px-6 py-4 whitespace-nowrap">
                         <div className="flex items-center">
-                          <div className="flex-shrink-0 h-10 w-10">
+                          <div className="flex-shrink-0 h-10 w-10 relative">
                             {it.images?.length ? (
-                              <img
-                                className="h-10 w-10 rounded-md object-cover"
-                                src={typeof it.images[0] === 'string' ? it.images[0] : (it.images[0]?.url || it.images[0]?.path)}
-                                alt=""
-                                onError={(e) => { e.currentTarget.src = 'data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIyMDAiIGhlaWdodD0iMjAwIiB2aWV3Qm94PSIwIDAgMjQgMjQiIGZpbGw9Im5vbmUiIHN0cm9rZT0iI2QxZDVkYiIgc3Ryb2tlLXdpZHRoPSIyIiBzdHJva2UtbGluZWNhcD0icm91bmQiIHN0cm9rZS1saW5lam9pbj0icm91bmQiPjxwYXRoIGQ9Ik0xOC44NSA5LjQyTDEyIDIuMTIgNS4xNSA5LjQyQzQuMzYgMTAuMTkgNC4zNiAxMS40OSA1LjE1IDEyLjI4TDExLjIyIDE4LjM1QzExLjYyIDE4Ljc1IDEyLjI1IDE4Ljc1IDEyLjY1IDE4LjM1TDE4Ljg1IDEyLjI4QzE5LjY0IDExLjQ5IDE5LjY0IDEwLjE5IDE4Ljg1IDkuNDJaIj48L3BhdGg+PHBhdGggZD0iTTkgMTJIMTUiPjwvcGF0aD48L3N2Zz4='; }}
-                              />
+                              <div className="h-10 w-10 rounded-md overflow-hidden">
+                                <img
+                                  className="h-full w-full object-cover"
+                                  src={getImageUrl(it.images[0])}
+                                  alt="Interest preview"
+                                  onError={(e) => {
+                                    e.target.onerror = null;
+                                    e.target.src = 'data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIyMDAiIGhlaWdodD0iMjAwIiB2aWV3Qm94PSIwIDAgMjQgMjQiIGZpbGw9Im5vbmUiIHN0cm9rZT0iI2QxZDVkYiIgc3Ryb2tlLXdpZHRoPSIyIiBzdHJva2UtbGluZWNhcD0icm91bmQiIHN0cm9rZS1saW5lam9pbj0icm91bmQiPjxwYXRoIGQ9Ik0xOC44NSA5LjQyTDEyIDIuMTJMNS4xNSA5LjRDMiLjkgMTEuNjUgMi45IDE1LjYgNS4xNSAxNy44NWMxLjYgMS42IDMuNyAyLjQgNS44NSAyLjQgMi4xNSAwIDQuMjUtLjggNS44NS0yLjRsNi44NS02Ljg1WiIvPjwvc3ZnPg==';
+                                  }}
+                                />
+                                {it.images.length > 1 && (
+                                  <div className="absolute -bottom-1 -right-1 bg-black bg-opacity-60 text-white text-xs rounded-full w-5 h-5 flex items-center justify-center">
+                                    +{it.images.length - 1}
+                                  </div>
+                                )}
+                              </div>
                             ) : (
                               <div className="h-10 w-10 rounded-md bg-gray-200 flex items-center justify-center">
-                                <span className="text-gray-500 text-xs">No Image</span>
+                                <FiImage className="text-gray-400" />
                               </div>
                             )}
                           </div>
@@ -478,10 +633,35 @@ const AdminProperties = () => {
                         </div>
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap">
-                        <div className="text-sm text-gray-900">
-                          {it.user?.firstName} {it.user?.lastName}
+                        <div className="flex flex-col space-y-1">
+                          {it.user ? (
+                            <>
+                              <div className="text-sm font-medium text-gray-900">
+                                {it.user.firstName} {it.user.lastName}
+                              </div>
+                              {it.user.email && (
+                                <a 
+                                  href={`mailto:${it.user.email}`}
+                                  className="text-sm text-blue-600 hover:underline"
+                                  onClick={(e) => e.stopPropagation()}
+                                >
+                                  {it.user.email}
+                                </a>
+                              )}
+                              {it.user.phone && (
+                                <a 
+                                  href={`tel:${it.user.phone}`}
+                                  className="text-sm text-gray-600 hover:text-blue-600 hover:underline"
+                                  onClick={(e) => e.stopPropagation()}
+                                >
+                                  {it.user.phone}
+                                </a>
+                              )}
+                            </>
+                          ) : (
+                            <div className="text-sm text-gray-500">No user data</div>
+                          )}
                         </div>
-                        <div className="text-sm text-gray-500">{it.user?.email}</div>
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
                         ETB {Number(it.priceRange?.min || 0).toLocaleString()} - ETB {Number(it.priceRange?.max || 0).toLocaleString()}
@@ -564,6 +744,212 @@ const AdminProperties = () => {
           </div>
         </div>
       </div>
+      )}
+
+      {/* Image Modal */}
+      {showImageModal && selectedProperty?.images?.length > 0 && (
+        <div className="fixed inset-0 z-50 overflow-y-auto" aria-labelledby="modal-title" role="dialog" aria-modal="true">
+          <div className="flex items-end justify-center min-h-screen pt-4 px-4 pb-20 text-center sm:block sm:p-0">
+            <div className="fixed inset-0 bg-gray-500 bg-opacity-75 transition-opacity" aria-hidden="true" onClick={() => setShowImageModal(false)}></div>
+            
+            <span className="hidden sm:inline-block sm:align-middle sm:h-screen" aria-hidden="true">&#8203;</span>
+            
+            <div className="inline-block align-bottom bg-white rounded-lg text-left overflow-hidden shadow-xl transform transition-all sm:my-8 sm:align-middle sm:max-w-4xl sm:w-full">
+              <div className="bg-white px-4 pt-5 pb-4 sm:p-6 sm:pb-4">
+                <div className="sm:flex sm:items-start">
+                  <div className="w-full">
+                    <div className="flex justify-between items-center mb-4">
+                      <h3 className="text-lg leading-6 font-medium text-gray-900" id="modal-title">
+                        {selectedProperty.title} - Images ({currentImageIndex + 1}/{selectedProperty.images.length})
+                      </h3>
+                      <button
+                        type="button"
+                        className="text-gray-400 hover:text-gray-500"
+                        onClick={() => setShowImageModal(false)}
+                      >
+                        <FiX className="h-6 w-6" />
+                      </button>
+                    </div>
+                    
+                    <div className="relative w-full h-96 bg-black rounded-lg overflow-hidden">
+                      <img
+                        src={getImageUrl(selectedProperty.images[currentImageIndex])}
+                        alt={`${selectedProperty.title} - Image ${currentImageIndex + 1}`}
+                        className="w-full h-full object-contain"
+                        onError={(e) => {
+                          e.target.onerror = null;
+                          e.target.src = 'data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIyMDAiIGhlaWdodD0iMjAwIiB2aWV3Qm94PSIwIDAgMjQgMjQiIGZpbGw9Im5vbmUiIHN0cm9rZT0iI2QxZDVkYiIgc3Ryb2tlLXdpZHRoPSIyIiBzdHJva2UtbGluZWNhcD0icm91bmQiIHN0cm9rZS1saW5lam9pbj0icm91bmQiPjxwYXRoIGQ9Ik0xOC44NSA5LjQyTDEyIDIuMTJMNS4xNSA5LjQyQzQuMzYgMTAuMTkgNC4zNiAxMS40OSA1LjE1IDEyLjI4TDExLjIyIDE4LjM1QzExLjYyIDE4Ljc1IDEyLjI1IDE4Ljc1IDEyLjY1IDE4LjM1TDE4Ljg1IDEyLjI4QzE5LjY0IDExLjQ5IDE5LjY0IDEwLjE5IDE4Ljg1IDkuNDJaIj48L3BhdGg+PHBhdGggZD0iTTkgMTJIMTUjMS44NSAxMiAxIDIxLjg1IDEyIDIydjAiPjwvcGF0aD48L3N2Zz4=';
+                        }}
+                      />
+                      
+                      {selectedProperty.images.length > 1 && (
+                        <>
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              prevImage();
+                            }}
+                            className="absolute left-2 top-1/2 -translate-y-1/2 bg-black bg-opacity-50 text-white p-2 rounded-full hover:bg-opacity-75 focus:outline-none"
+                          >
+                            <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+                            </svg>
+                          </button>
+                          
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              nextImage();
+                            }}
+                            className="absolute right-2 top-1/2 -translate-y-1/2 bg-black bg-opacity-50 text-white p-2 rounded-full hover:bg-opacity-75 focus:outline-none"
+                          >
+                            <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                            </svg>
+                          </button>
+                        </>
+                      )}
+                      
+                      <div className="absolute bottom-4 left-0 right-0 flex justify-center space-x-2">
+                        {selectedProperty.images.map((_, index) => (
+                          <button
+                            key={index}
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setCurrentImageIndex(index);
+                            }}
+                            className={`w-3 h-3 rounded-full ${currentImageIndex === index ? 'bg-white' : 'bg-white bg-opacity-50'}`}
+                            aria-label={`Go to image ${index + 1}`}
+                          />
+                        ))}
+                      </div>
+                    </div>
+                    
+                    <div className="mt-4 flex space-x-2 overflow-x-auto pb-2">
+                      {selectedProperty.images.map((img, index) => (
+                        <button
+                          key={index}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setCurrentImageIndex(index);
+                          }}
+                          className={`flex-shrink-0 w-16 h-16 rounded-md overflow-hidden border-2 ${currentImageIndex === index ? 'border-blue-500' : 'border-transparent'}`}
+                        >
+                          <img
+                            src={getImageUrl(img)}
+                            alt={`Thumbnail ${index + 1}`}
+                            className="w-full h-full object-cover"
+                            onError={(e) => {
+                              e.target.onerror = null;
+                              e.target.src = 'data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIyMDAiIGhlaWdodD0iMjAwIiB2aWV3Qm94PSIwIDAgMjQgMjQiIGZpbGw9Im5vbmUiIHN0cm9rZT0iI2QxZDVkYiIgc3Ryb2tlLXdpZHRoPSIyIiBzdHJva2UtbGluZWNhcD0icm91bmQiIHN0cm9rZS1saW5lam9pbj0icm91bmQiPjxwYXRoIGQ9Ik0xOC44NSA5LjQyTDEyIDIuMTJMNS4xNSA5LjQyQzQuMzYgMTAuMTkgNC4zNiAxMS40OSA1LjE1IDEyLjI4TDExLjIyIDE4LjM1QzExLjYyIDE4Ljc1IDEyLjI1IDE4Ljc1IDEyLjY1IDE4LjM1TDE4Ljg1IDEyLjI4QzE5LjY0IDExLjQ5IDE5LjY0IDEwLjE5IDE4Ljg1IDkuNDZaIi8+PC9zdmc+';
+                            }}
+                          />
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+              </div>
+              <div className="bg-gray-50 px-4 py-3 sm:px-6 sm:flex sm:flex-row-reverse">
+                <button
+                  type="button"
+                  className="w-full inline-flex justify-center rounded-md border border-transparent shadow-sm px-4 py-2 bg-blue-600 text-base font-medium text-white hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 sm:ml-3 sm:w-auto sm:text-sm"
+                  onClick={() => setShowImageModal(false)}
+                >
+                  Close
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* User Info Modal */}
+      {showUserInfo && selectedUser && (
+        <div className="fixed inset-0 z-50 overflow-y-auto" aria-labelledby="user-modal-title" role="dialog" aria-modal="true">
+          <div className="flex items-end justify-center min-h-screen pt-4 px-4 pb-20 text-center sm:block sm:p-0">
+            <div className="fixed inset-0 bg-gray-500 bg-opacity-75 transition-opacity" onClick={() => setShowUserInfo(false)}></div>
+            
+            <span className="hidden sm:inline-block sm:align-middle sm:h-screen" aria-hidden="true">&#8203;</span>
+            
+            <div className="inline-block align-bottom bg-white rounded-lg text-left overflow-hidden shadow-xl transform transition-all sm:my-8 sm:align-middle sm:max-w-lg sm:w-full">
+              <div className="bg-white px-4 pt-5 pb-4 sm:p-6 sm:pb-4">
+                <div className="sm:flex sm:items-start">
+                  <div className="mt-3 text-center sm:mt-0 sm:ml-4 sm:text-left w-full">
+                    <div className="flex justify-between items-center">
+                      <h3 className="text-lg leading-6 font-medium text-gray-900" id="user-modal-title">
+                        User Information
+                      </h3>
+                      <button
+                        type="button"
+                        className="text-gray-400 hover:text-gray-500"
+                        onClick={() => setShowUserInfo(false)}
+                      >
+                        <FiX className="h-6 w-6" />
+                      </button>
+                    </div>
+                    
+                    <div className="mt-4 space-y-4">
+                      <div>
+                        <dt className="text-sm font-medium text-gray-500">Full Name</dt>
+                        <dd className="mt-1 text-sm text-gray-900">
+                          {selectedUser.firstName} {selectedUser.lastName}
+                        </dd>
+                      </div>
+                      
+                      <div>
+                        <dt className="text-sm font-medium text-gray-500">Email</dt>
+                        <dd className="mt-1 text-sm text-gray-900">
+                          <a href={`mailto:${selectedUser.email}`} className="text-blue-600 hover:underline">
+                            {selectedUser.email}
+                          </a>
+                        </dd>
+                      </div>
+                      
+                      {selectedUser.phone && (
+                        <div>
+                          <dt className="text-sm font-medium text-gray-500">Phone</dt>
+                          <dd className="mt-1 text-sm text-gray-900">
+                            <a href={`tel:${selectedUser.phone}`} className="text-blue-600 hover:underline">
+                              {selectedUser.phone}
+                            </a>
+                          </dd>
+                        </div>
+                      )}
+                      
+                      {selectedUser.address && (
+                        <div>
+                          <dt className="text-sm font-medium text-gray-500">Address</dt>
+                          <dd className="mt-1 text-sm text-gray-900 whitespace-pre-line">
+                            {selectedUser.address}
+                          </dd>
+                        </div>
+                      )}
+                      
+                      {selectedUser.createdAt && (
+                        <div>
+                          <dt className="text-sm font-medium text-gray-500">Member Since</dt>
+                          <dd className="mt-1 text-sm text-gray-900">
+                            {new Date(selectedUser.createdAt).toLocaleDateString()}
+                          </dd>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              </div>
+              <div className="bg-gray-50 px-4 py-3 sm:px-6 sm:flex sm:flex-row-reverse">
+                <button
+                  type="button"
+                  className="w-full inline-flex justify-center rounded-md border border-transparent shadow-sm px-4 py-2 bg-blue-600 text-base font-medium text-white hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 sm:ml-3 sm:w-auto sm:text-sm"
+                  onClick={() => setShowUserInfo(false)}
+                >
+                  Close
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );

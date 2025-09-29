@@ -1,7 +1,8 @@
-import React, { useState } from 'react';
+import React, { useState, useCallback } from 'react';
 import { useForm } from 'react-hook-form';
 import { toast } from 'react-hot-toast';
 import api from '../../services/api';
+import { FiUpload, FiX } from 'react-icons/fi';
 
 const InterestForm = ({ onSuccess, interest: propInterest }) => {
   const { register, handleSubmit, watch, formState: { errors }, reset } = useForm({
@@ -20,8 +21,46 @@ const InterestForm = ({ onSuccess, interest: propInterest }) => {
   });
 
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [previewImages, setPreviewImages] = useState(propInterest?.images?.map(img => ({
+    url: img.url || getImageUrl(img),
+    file: null,
+    isNew: false
+  })) || []);
   const selectedType = watch('type');
   const currentYear = new Date().getFullYear();
+
+  const getImageUrl = (image) => {
+    if (!image) return '';
+    if (typeof image === 'string') return image;
+    if (image.url) return image.url;
+    if (image.path) return `${process.env.REACT_APP_API_URL || 'http://localhost:5000'}/uploads/interests/${image.path.split('/').pop()}`;
+    return '';
+  };
+
+  const handleImageChange = (e) => {
+    const files = Array.from(e.target.files);
+    
+    files.forEach(file => {
+      if (!file.type.startsWith('image/')) {
+        toast.error('Please upload only image files');
+        return;
+      }
+      
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        setPreviewImages(prev => [...prev, {
+          url: reader.result,
+          file,
+          isNew: true
+        }]);
+      };
+      reader.readAsDataURL(file);
+    });
+  };
+
+  const removeImage = (index) => {
+    setPreviewImages(prev => prev.filter((_, i) => i !== index));
+  };
 
   // Field configurations for each interest type
   const fieldConfigs = {
@@ -46,7 +85,6 @@ const InterestForm = ({ onSuccess, interest: propInterest }) => {
   };
 
   const onSubmit = async (data) => {
-
     setIsSubmitting(true);
     const formData = new FormData();
     
@@ -54,6 +92,13 @@ const InterestForm = ({ onSuccess, interest: propInterest }) => {
     formData.append('type', data.type);
     formData.append('transactionType', data.transactionType);
     formData.append('notes', data.notes || '');
+    
+    // Add images
+    previewImages.forEach((img, index) => {
+      if (img.isNew && img.file) {
+        formData.append('images', img.file);
+      }
+    });
     
     // Prepare price range as an object (not stringified)
     const priceRange = {
@@ -191,6 +236,76 @@ const InterestForm = ({ onSuccess, interest: propInterest }) => {
               <p className="mt-1 text-sm text-red-600">
                 {errors.details.maxPrice.message}
               </p>
+            )}
+          </div>
+        </div>
+
+        {/* Image Upload */}
+        <div className="space-y-4">
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-2">
+              Upload Images (Optional)
+            </label>
+            <div className="mt-1 flex justify-center px-6 pt-5 pb-6 border-2 border-gray-300 border-dashed rounded-md">
+              <div className="space-y-1 text-center">
+                <svg
+                  className="mx-auto h-12 w-12 text-gray-400"
+                  stroke="currentColor"
+                  fill="none"
+                  viewBox="0 0 48 48"
+                  aria-hidden="true"
+                >
+                  <path
+                    d="M28 8H12a4 4 0 00-4 4v20m32-12v8m0 0v8a4 4 0 01-4 4H12a4 4 0 01-4-4v-4m32-4l-3.172-3.172a4 4 0 00-5.656 0L28 28M8 32l9.172-9.172a4 4 0 015.656 0L28 28m0 0l4 4m4-24h8m-4-4v8m-12 4h.02"
+                    strokeWidth={2}
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                  />
+                </svg>
+                <div className="flex text-sm text-gray-600">
+                  <label
+                    htmlFor="file-upload"
+                    className="relative cursor-pointer bg-white rounded-md font-medium text-blue-600 hover:text-blue-500 focus-within:outline-none"
+                  >
+                    <span>Upload files</span>
+                    <input
+                      id="file-upload"
+                      name="file-upload"
+                      type="file"
+                      className="sr-only"
+                      multiple
+                      accept="image/*"
+                      onChange={handleImageChange}
+                      disabled={isSubmitting}
+                    />
+                  </label>
+                  <p className="pl-1">or drag and drop</p>
+                </div>
+                <p className="text-xs text-gray-500">PNG, JPG, GIF up to 5MB</p>
+              </div>
+            </div>
+            
+            {/* Image Previews */}
+            {previewImages.length > 0 && (
+              <div className="mt-4 grid grid-cols-2 md:grid-cols-4 gap-4">
+                {previewImages.map((img, index) => (
+                  <div key={index} className="relative group">
+                    <img
+                      src={img.url}
+                      alt={`Preview ${index + 1}`}
+                      className="h-32 w-full object-cover rounded-lg"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => removeImage(index)}
+                      className="absolute -top-2 -right-2 bg-red-500 text-white rounded-full p-1 opacity-0 group-hover:opacity-100 transition-opacity"
+                      disabled={isSubmitting}
+                    >
+                      <FiX size={16} />
+                    </button>
+                  </div>
+                ))}
+              </div>
             )}
           </div>
         </div>

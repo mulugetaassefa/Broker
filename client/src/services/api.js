@@ -653,6 +653,7 @@ const api = {
         params,
         headers: getAuthHeader()
       });
+      console.log('Interests API response:', response.data);
       return response.data;
     },
     getById: async (id) => {

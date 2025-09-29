@@ -76,7 +76,11 @@ const InterestDetail = () => {
       filename = image.filename;
     } else if (image?.originalname) {
       // For file objects
-      return URL.createObjectURL(image);
+      try {
+        return URL.createObjectURL(image);
+      } catch (e) {
+        console.warn('Error creating object URL:', e);
+      }
     }
 
     // If we have a filename, construct the full URL
@@ -84,7 +88,7 @@ const InterestDetail = () => {
       const baseUrl = process.env.REACT_APP_API_URL || 'http://localhost:5000';
       // Remove any leading slashes from the filename
       const cleanFilename = filename.replace(/^[\\/]+/, '');
-      // Construct the URL without /api prefix
+      // Construct the URL
       return `${baseUrl}/uploads/interests/${cleanFilename}`;
     }
 
@@ -321,18 +325,46 @@ const InterestDetail = () => {
         <div className="px-6 py-4 bg-gray-50 border-t border-gray-200">
           <div className="flex items-center">
             <div className="flex-shrink-0">
-              <FiUser className="h-10 w-10 text-gray-400" />
-            </div>
-            <div className="ml-4">
-              <h4 className="text-sm font-medium text-gray-900">
-                {interest.user?.name || 'Unknown User'}
-              </h4>
-              <p className="text-sm text-gray-500">
-                {interest.user?.email || 'No email provided'}
-              </p>
-              {interest.user?.phone && (
-                <p className="text-sm text-gray-500">{interest.user.phone}</p>
+              {interest.images && interest.images.length > 0 && (
+                <div className="mt-8 bg-white shadow overflow-hidden sm:rounded-lg p-4">
+                  <h3 className="text-lg font-medium text-gray-900 mb-4">Images</h3>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
+                    {interest.images.map((img, index) => (
+                      <div key={index} className="relative group">
+                        <img
+                          src={getImageUrl(img)}
+                          alt={`Interest ${index + 1}`}
+                          className="w-full h-48 object-cover rounded-lg shadow-sm hover:shadow-md transition-shadow duration-200"
+                          onError={() => handleImageError(index)}
+                        />
+                      </div>
+                    ))}
+                  </div>
+                </div>
               )}
+              <div className="mt-8 bg-white shadow overflow-hidden sm:rounded-lg">
+                <div className="px-4 py-5 sm:px-6">
+                  <h3 className="text-lg leading-6 font-medium text-gray-900">
+                    Interest Details
+                  </h3>
+                </div>
+                <div className="flex items-center">
+                  <div className="flex-shrink-0">
+                    <FiUser className="h-10 w-10 text-gray-400" />
+                  </div>
+                  <div className="ml-4">
+                    <h4 className="text-sm font-medium text-gray-900">
+                      {interest.user?.name || 'Unknown User'}
+                    </h4>
+                    <p className="text-sm text-gray-500">
+                      {interest.user?.email || 'No email provided'}
+                    </p>
+                    {interest.user?.phone && (
+                      <p className="text-sm text-gray-500">{interest.user.phone}</p>
+                    )}
+                  </div>
+                </div>
+              </div>
             </div>
           </div>
         </div>
